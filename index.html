@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagesablauf">
-<title>Tagesablauf v11 — Bioenergetische Frequenzarbeit</title>
+<title>Tagesablauf v12 — Bioenergetische Frequenzarbeit</title>
 <style>
   :root {
     --royal:    #1565C0;
@@ -98,6 +98,23 @@
   .zb.on.kribbel { background:#E8A400; color:#fff; border-color:#E8A400; }
   .zb.on.schub   { background:var(--rot); color:#fff; border-color:var(--rot); }
   .kribbel-card { border:1.5px solid #F1D08A !important; background:#FFF8EA !important; }
+  .beine-card { border:1.5px solid var(--hellblau); }
+  .beine-card.aktiv { border:1.5px solid #E7A9A2; background:#FFFBFA; }
+  .bz { display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+        padding:0.55rem 0; border-top:1px solid #eef2f7; }
+  .bz:first-of-type { border-top:none; }
+  .bz.nolines { border-top:1px solid #eef2f7; padding-bottom:0.3rem; }
+  .bz-l { font-size:0.95rem; font-weight:800; color:var(--dunkel); text-align:left; }
+  .bz-l small { display:block; font-size:0.7rem; font-weight:600; color:#8494a4; }
+  .bz-r { display:flex; gap:0.3rem; flex-shrink:0; }
+  .tg { min-width:3.4rem; text-align:center; padding:0.5rem 0.6rem; border-radius:10px;
+        border:1.5px solid #cdd9e6; background:#fff; font-size:0.85rem; font-weight:800; color:#8494a4; cursor:pointer; }
+  .tg.on.nein  { background:#eef2f7; color:#5a6b7c; border-color:#cdd9e6; }
+  .tg.on.ja    { background:var(--rot); color:#fff; border-color:var(--rot); }
+  .tg.on.gruen { background:var(--gruen); color:#fff; border-color:var(--gruen); }
+  .bz-uhr { font-size:0.82rem; font-weight:700; text-align:right; margin:-0.2rem 0 0.3rem; font-variant-numeric:tabular-nums; }
+  .bz-uhr.rot { color:var(--rot); }
+  .bz-uhr.gruen { color:var(--gruen); }
   .rauch-card { border:1.5px solid #E4C79E; background:#FFFBF4; }
   .rauch-top { margin-bottom:0.5rem; }
   .rauch-zahl { font-size:2.1rem; font-weight:800; color:#8a5a2a; line-height:1.1; font-variant-numeric:tabular-nums; }
@@ -243,7 +260,7 @@
   <footer>
     Idee, Konzept &amp; Architektur: Markus Rufer<br>
     Technische Umsetzung mit Claude by Anthropic<br>
-    <span style="opacity:0.7;">Version 11</span>
+    <span style="opacity:0.7;">Version 12</span>
   </footer>
 </main>
 
@@ -264,18 +281,13 @@ D.schuebe = D.schuebe || []; D.eintraege = D.eintraege || []; D.messungen = D.me
 D.tage = D.tage || {}; D.eigene = D.eigene || {};
 
 const SKALEN = [
-  { id:'schwere', n:'Schwere',  ic:'🪨', links:'leicht',  rechts:'bleischwer' },
-  { id:'unruhe',  n:'Unruhe',   ic:'〰️', links:'ruhig',   rechts:'sehr unruhig' }
+  { id:'schwere', n:'Schwere', ic:'🪨', links:'leicht', rechts:'bleischwer' }
 ];
-function skala(id){ return SKALEN.find(x=>x.id===id) || {id:id, n:id, ic:'📏'}; }
+const SKALEN_ALT = [{ id:'unruhe', n:'Unruhe', ic:'〰️', links:'ruhig', rechts:'sehr unruhig' }];
+function skala(id){ return SKALEN.concat(SKALEN_ALT).find(x=>x.id===id) || {id:id, n:id, ic:'📏'}; }
 function letzteMessung(id){
   const l = D.messungen.filter(m=>m.art===id).sort((a,b)=>b.ts-a.ts);
   return l.length ? l[0] : null;
-}
-function messen(id, wert){
-  D.messungen.push({id:uid(), ts:Date.now(), art:id, wert:wert});
-  save(); toast(skala(id).ic+' '+skala(id).n+' '+wert+' · '+fmtT(Date.now()));
-  render(true);
 }
 
 /* ═══════════════ KATALOG: TAGESABLAUF ═══════════════ */
@@ -444,7 +456,9 @@ function phasen(){ return D.schuebe.slice().sort((a,b)=>a.s-b.s); }
 function schuebeSort(){ return D.schuebe.filter(x=>art(x)==='schub').sort((a,b)=>a.s-b.s); }
 function kribbelPhasen(){ return D.schuebe.filter(x=>art(x)==='kribbel').sort((a,b)=>a.s-b.s); }
 function laufender(){ return D.schuebe.find(x=>!x.e); }
-const ART_INFO = { schub:{n:'RLS-Schub', ic:'🦵'}, kribbel:{n:'Kribbeln', ic:'🌡️'} };
+function laufenderArt(a){ return D.schuebe.find(x=>!x.e && art(x)===a) || null; }
+function laufende(){ return D.schuebe.filter(x=>!x.e); }
+const ART_INFO = { schub:{n:'RLS-Schub', ic:'🦵'}, kribbel:{n:'Angenehmes Kribbeln', ic:'🌡️'} };
 function schEnde(x){ return x.e || Date.now(); }
 function schDauer(x){ return Math.max(0, schEnde(x)-x.s); }
 const LINDERUNG = ['Aufstehen','Gehen','Dehnen','Kalt abduschen','Etwas Kaltes gegessen','Kalt getrunken','Wärme','Massieren','Magnesium','Ablenkung','Von selbst weg','Nichts geholfen'];
@@ -510,14 +524,17 @@ function render(keepScroll){
   else if(modus==='bericht') c.innerHTML = viewBericht();
   else if(modus==='verlauf') c.innerHTML = viewVerlauf();
   else c.innerHTML = viewDaten();
-  if(modus==='heute' && laufender()) startLive();
+  if(modus==='heute' && laufende().length) startLive();
   window.scrollTo(0, keepScroll ? y : 0);
 }
 function startLive(){
   const tick = ()=>{
-    const l = laufender(); const el = document.getElementById('liveUhr');
-    if(!l || !el){ clearInterval(liveTimer); liveTimer=null; return; }
-    el.textContent = uhrTxt(Date.now()-l.s);
+    const lf = laufende();
+    if(!lf.length){ clearInterval(liveTimer); liveTimer=null; return; }
+    lf.forEach(p=>{
+      const el = document.getElementById('uhr_'+p.id);
+      if(el) el.textContent = uhrTxt(Date.now()-p.s);
+    });
   };
   tick(); liveTimer = setInterval(tick, 1000);
 }
@@ -536,7 +553,6 @@ function viewHeute(){
     h += '</div>';
   });
   h += '</div>';
-  h += beinKarte();
   h += '<div class="card"><div class="card-h">Zeitleiste heute</div>' + timelineHTML(heuteKey()) + '</div>';
   return h;
 }
@@ -576,19 +592,6 @@ function rauchKarte(){
     + '</div></div>';
 }
 function zahlKomma(x){ return (Math.round(x*10)/10).toString().replace('.',','); }
-function beinKarte(){
-  let h = '<div class="card"><div class="card-h">Wie sind die Beine gerade?</div>'
-    + '<div class="card-sub">Unabhängig von Schub und Kribbeln – der Grundzustand. Jederzeit tippen, auch mehrmals am Tag.</div>';
-  SKALEN.forEach(sk=>{
-    const l = letzteMessung(sk.id);
-    const heute = l && dkey(l.ts)===heuteKey();
-    h += '<div class="bein-h">'+sk.ic+' '+sk.n+(heute?' <span class="bein-alt">zuletzt '+l.wert+' um '+fmtT(l.ts)+'</span>':'')+'</div>'
-      + '<div class="int-row">'
-      + [1,2,3,4,5].map(i=>'<div class="int-b'+(heute && l.wert===i?' on blau':'')+'" onclick="messen(\''+sk.id+'\','+i+')">'+i+'</div>').join('')
-      + '</div><div class="int-lbl"><span>'+sk.links+'</span><span>'+sk.rechts+'</span></div>';
-  });
-  return h + '</div>';
-}
 function kachel(gid, i){
   const heute = D.eintraege.filter(x=>x.item===i.n && dkey(x.ts)===heuteKey());
   const letzte = heute.length ? heute[heute.length-1] : null;
@@ -615,7 +618,6 @@ function timelineHTML(key){
       const x = it.o, ai = ART_INFO[art(x)];
       const det = [];
       det.push(x.e ? fmtT(x.s)+'–'+fmtT(x.e) : 'seit '+fmtT(x.s));
-      if(x.int) det.push('Intensität '+x.int);
       if(x.qual && x.qual.length) det.push(x.qual.join(', '));
       if(x.seite) det.push(x.seite);
       if(x.pos) det.push(x.pos);
@@ -808,58 +810,52 @@ function eigenesListe(art){
     });
 }
 
-/* ═══════════════ ZUSTANDS-KARTE ═══════════════ */
+/* ═══════════════ BEINE JETZT ═══════════════ */
 function schubKarte(){
-  const l = laufender();
-  const jetzt = l ? art(l) : 'ruhe';
-  const seg = '<div class="zseg">'
-    + [['ruhe','😌 Ruhe'],['kribbel','🌡️ Kribbeln'],['schub','🦵 Schub']].map(o=>
-        '<div class="zb'+(jetzt===o[0]?' on '+o[0]:'')+'" onclick="zustand(\''+o[0]+'\')">'+o[1]+'</div>').join('')
-    + '</div>';
-  if(!l) return '<div class="card schub-card ruhig">'+seg
-    + '<div class="hint" style="text-align:center;margin-top:0.6rem;">Zustand tippen – Zeit läuft automatisch mit.</div>'
-    + '<button class="link-btn" onclick="schubRueck()">rückwirkend erfassen</button></div>';
+  const sch = laufenderArt('schub'), kr = laufenderArt('kribbel');
+  const m = letzteMessung('schwere');
+  const mHeute = m && dkey(m.ts)===heuteKey();
 
-  const kribbel = jetzt === 'kribbel';
-  return '<div class="card schub-card'+(kribbel?' kribbel-card':'')+'">'+seg
-    + '<div class="schub-lbl" style="margin-top:0.7rem;'+(kribbel?'color:#a8650c;':'')+'">'+ART_INFO[jetzt].n+' läuft</div>'
-    + '<div class="schub-uhr" id="liveUhr" style="'+(kribbel?'color:#C77700;':'')+'">00:00:00</div>'
-    + '<div class="schub-seit"'+(kribbel?' style="color:#a8650c;"':'')+'>Start '+fmtT(l.s)+'</div>'
-    + '<div class="int-lbl" style="margin-top:0.7rem;"><span>leicht</span><span>stark</span></div>'
-    + '<div class="int-row">'+[1,2,3,4,5].map(i=>'<div class="int-b'+(l.int===i?' on':'')+'" onclick="setInt('+i+')">'+i+'</div>').join('')+'</div>'
-    + '<div class="qual-h">Wie fühlt es sich an?</div>'
-    + '<div class="chips" style="justify-content:center;">'
-    + QUALITAETEN.map(q=>'<div class="chip'+((l.qual||[]).indexOf(q)>=0?' on':'')+'" onclick="setQual(\''+q+'\')">'+q+'</div>').join('')
-    + '</div>'
-    + '<button class="link-btn" onclick="schubBearbeiten(\''+l.id+'\')">Zeiten und Details bearbeiten</button>'
-    + '</div>';
+  let h = '<div class="card beine-card'+(sch?' aktiv':'')+'">'
+    + '<div class="card-h">Wie sind die Beine gerade?</div>';
+
+  /* Schub */
+  h += '<div class="bz"><div class="bz-l">🦵 Schub</div>'
+    + '<div class="bz-r"><div class="tg'+(sch?'':' on nein')+'" onclick="phaseAus(\'schub\')">nein</div>'
+    + '<div class="tg'+(sch?' on ja':'')+'" onclick="phaseAn(\'schub\')">ja</div></div></div>'
+    + (sch ? '<div class="bz-uhr rot">seit '+fmtT(sch.s)+' · <span id="uhr_'+sch.id+'">00:00:00</span></div>' : '');
+
+  /* Kribbeln */
+  h += '<div class="bz"><div class="bz-l">🌡️ Kribbeln <small>angenehm</small></div>'
+    + '<div class="bz-r"><div class="tg'+(kr?'':' on nein')+'" onclick="phaseAus(\'kribbel\')">nein</div>'
+    + '<div class="tg'+(kr?' on gruen':'')+'" onclick="phaseAn(\'kribbel\')">ja</div></div></div>'
+    + (kr ? '<div class="bz-uhr gruen">seit '+fmtT(kr.s)+' · <span id="uhr_'+kr.id+'">00:00:00</span></div>' : '');
+
+  /* Schwere */
+  h += '<div class="bz nolines"><div class="bz-l">🪨 Schwere'+(mHeute?' <small>zuletzt '+m.wert+' um '+fmtT(m.ts)+'</small>':'')+'</div></div>'
+    + '<div class="int-row">'
+    + [1,2,3,4,5].map(i=>'<div class="int-b'+(mHeute && m.wert===i?' on blau':'')+'" onclick="messen(\'schwere\','+i+')">'+i+'</div>').join('')
+    + '</div><div class="int-lbl"><span>leicht</span><span>bleischwer</span></div>';
+
+  h += '<button class="link-btn" onclick="schubRueck()">rückwirkend erfassen</button></div>';
+  return h;
 }
-function zustand(neuArt){
-  const l = laufender(), t = Date.now();
-  if(l && art(l) === neuArt) return;
-  const warSchub = l && art(l) === 'schub';
-  if(l){ l.e = t; delete l.neu; }
-  if(neuArt !== 'ruhe'){
-    D.schuebe.push({id:uid(), art:neuArt, s:t, e:null, int:null, seite:'', pos:'', hilf:[], qual:[], verlauf:[], nz:''});
-    save(); render(true);
-    if(warSchub) toast('Schub → Kribbeln · '+fmtT(t));
-    return;
-  }
-  save();
-  if(warSchub) schubBearbeiten(l.id, true); else render(true);
-}
-function setInt(i){
-  const l = laufender(); if(!l) return;
-  l.int = (l.int===i ? null : i);
-  if(l.int){ l.verlauf = l.verlauf || []; l.verlauf.push({ts:Date.now(), int:l.int}); }
+function phaseAn(a){
+  if(laufenderArt(a)) return;
+  D.schuebe.push({id:uid(), art:a, s:Date.now(), e:null, int:null, seite:'', pos:'', hilf:[], qual:[], verlauf:[], nz:''});
   save(); render(true);
+  toast(ART_INFO[a].ic+' '+ART_INFO[a].n+' beginnt · '+fmtT(Date.now()));
 }
-function setQual(q){
-  const l = laufender(); if(!l) return;
-  l.qual = l.qual || [];
-  const i = l.qual.indexOf(q);
-  if(i>=0) l.qual.splice(i,1); else l.qual.push(q);
-  save(); render(true);
+function phaseAus(a){
+  const l = laufenderArt(a); if(!l) return;
+  l.e = Date.now(); delete l.neu; save();
+  if(a==='schub') schubBearbeiten(l.id, true);
+  else { render(true); toast('Kribbeln vorbei · '+dauerTxt(schDauer(l))); }
+}
+function messen(id, wert){
+  D.messungen.push({id:uid(), ts:Date.now(), art:id, wert:wert});
+  save(); toast('🪨 Schwere '+wert+' · '+fmtT(Date.now()));
+  render(true);
 }
 function schubRueck(){
   const n = Date.now();
@@ -874,7 +870,6 @@ function schubBearbeiten(id, nachStopp){
     + '</div></div>'
     + '<div class="field"><label>Start</label><input type="datetime-local" id="eS" value="'+toLocalInput(e.s)+'"></div>'
     + '<div class="field"><label>Ende'+(e.e?'':' (leer = läuft noch)')+'</label><input type="datetime-local" id="eE" value="'+(e.e?toLocalInput(e.e):'')+'"></div>'
-    + '<div class="field"><label>Intensität</label><div class="chips" id="cInt">'+[1,2,3,4,5].map(i=>'<div class="chip'+(e.int===i?' on':'')+'" data-v="'+i+'">'+i+'</div>').join('')+'</div></div>'
     + '<div class="field"><label>Seite</label><div class="chips" id="cSeite">'+SEITEN.map(s=>'<div class="chip'+(e.seite===s?' on':'')+'" data-v="'+s+'">'+s+'</div>').join('')+'</div></div>'
     + '<div class="field"><label>Position</label><div class="chips" id="cPos">'+POSITIONEN.map(s=>'<div class="chip'+(e.pos===s?' on':'')+'" data-v="'+s+'">'+s+'</div>').join('')+'</div></div>'
     + '<div class="field"><label>Empfindung</label><div class="chips" id="cQual">'
@@ -883,7 +878,7 @@ function schubBearbeiten(id, nachStopp){
     + '<div class="field"><label>Notiz</label><textarea id="eN" rows="2">'+esc(e.nz||'')+'</textarea></div>'
     + '<div class="ui-btns"><button class="ui-del" id="bDel">Löschen</button><button class="ui-no" id="bAbb">Abbrechen</button><button class="ui-yes" id="bOk">Speichern</button></div>';
   modal(h, el=>{
-    ['cArt','cInt','cSeite','cPos'].forEach(g=>{
+    ['cArt','cSeite','cPos'].forEach(g=>{
       el.querySelectorAll('#'+g+' .chip').forEach(c=>c.onclick=()=>{
         const an = c.classList.contains('on');
         el.querySelectorAll('#'+g+' .chip').forEach(x=>x.classList.remove('on'));
@@ -906,7 +901,6 @@ function schubBearbeiten(id, nachStopp){
       if(en && en < s){ info('Das Ende liegt vor dem Start.'); return; }
       e.s = s; e.e = en;
       const sel = g=>{ const c = el.querySelector('#'+g+' .chip.on'); return c ? c.dataset.v : ''; };
-      const iv = sel('cInt'); e.int = iv ? parseInt(iv,10) : null;
       e.seite = sel('cSeite'); e.pos = sel('cPos');
       e.hilf = Array.from(el.querySelectorAll('#cHilf .chip.on')).map(c=>c.dataset.v);
       e.qual = Array.from(el.querySelectorAll('#cQual .chip.on')).map(c=>c.dataset.v);
@@ -1033,15 +1027,15 @@ function viewMuster(){
   const gesMin = Object.values(minTag).reduce((a,b)=>a+b,0);
   const abg = sch.filter(e=>e.e);
   const oDauer = abg.length ? abg.reduce((a,e)=>a+schDauer(e),0)/abg.length : 0;
-  const mitInt = sch.filter(e=>e.int);
-  const oInt = mitInt.length ? mitInt.reduce((a,e)=>a+e.int,0)/mitInt.length : 0;
   const frei = tage.filter(k=>!minTag[k]).length;
 
   let h = '<div class="card"><div class="card-h">Überblick · '+tage.length+' Tage erfasst</div><div class="stat-grid">'
     + stat(sch.length,'Schübe') + stat(dauerTxt(oDauer),'Ø Dauer')
     + stat(Math.round(gesMin/Math.max(1,tage.length))+' Min','Ø pro Tag')
     + stat(frei+' / '+tage.length,'Schubfreie Tage')
-    + stat(oInt?oInt.toFixed(1):'–','Ø Intensität')
+    + stat(D.messungen.filter(m=>m.art==='schwere').length
+        ? (D.messungen.filter(m=>m.art==='schwere').reduce((a,m)=>a+m.wert,0)/D.messungen.filter(m=>m.art==='schwere').length).toFixed(1)
+        : '–', 'Ø Schwere')
     + stat(Math.round(Object.values(minutenProTag(kribbelPhasen())).reduce((a,b)=>a+b,0))+' Min','Kribbeln total')
     + (letzteMessung('schwere') ? stat(letzteMessung('schwere').wert+' / 5','Schwere zuletzt') : '')
     + '</div></div>';
@@ -1206,14 +1200,45 @@ function kribbelHTML(){
   const oD = abg.length ? abg.reduce((a,x)=>a+schDauer(x),0)/abg.length : 0;
   let nachSchub = 0;
   kr.forEach(k=>{ if(D.schuebe.some(s=>art(s)==='schub' && s.e && Math.abs(k.s - s.e) < 3*60000)) nachSchub++; });
-  return '<div class="card"><div class="card-h">Kribbelphasen</div>'
-    + '<div class="card-sub">Der Zustand zwischen Ruhe und Schub – als Vorbote oder als Nachwirkung.</div>'
+  return '<div class="card"><div class="card-h">Angenehmes Kribbeln</div>'
+    + '<div class="card-sub">Der wohltuende Zustand – oft im Anschluss an einen Schub, manchmal für sich allein.</div>'
     + '<div class="stat-grid">'
     + stat(kr.length,'Phasen') + stat(dauerTxt(oD),'Ø Dauer')
-    + stat(nachSchub,'direkt nach einem Schub') + stat(kr.length-nachSchub,'eigenständig')
+    + stat(nachSchub,'nach einem Schub') + stat(kr.length-nachSchub,'ohne Schub davor')
     + '</div>'
-    + '<div class="hint" style="margin-top:0.6rem;">Kribbelminuten zählen nicht zu den Schubminuten – so bleibt sichtbar, ob ein Mittel den Schub wirklich beendet oder ihn nur abschwächt.</div></div>';
+    + wohltuerHTML()
+    + '</div>';
 }
+/* ─── Was bringt das angenehme Kribbeln? ─── */
+const KRIBBEL_WIN = 2;   /* Stunden */
+function kribbelStat(evs){
+  const kr = kribbelPhasen(), w = KRIBBEL_WIN*3600000;
+  let treffer = 0; const lat = [];
+  evs.forEach(v=>{
+    const ref = endeVon(v);
+    let erste = null;
+    kr.forEach(k=>{ if(k.s >= ref && k.s <= ref+w && (erste===null || k.s<erste)) erste = k.s; });
+    if(erste!==null){ treffer++; lat.push(erste - ref); }
+  });
+  lat.sort((a,b)=>a-b);
+  return { n:evs.length, t:treffer, q:evs.length?treffer/evs.length:0,
+    lat: lat.length ? lat.reduce((a,b)=>a+b,0)/lat.length : null };
+}
+function wohltuerHTML(){
+  const dinge = alleDinge().map(x=>Object.assign({}, x, {st:kribbelStat(x.evs)})).filter(x=>x.st.n>=MIN_N && x.st.t>0);
+  if(!dinge.length) return '';
+  dinge.sort((a,b)=>b.st.q-a.st.q);
+  return '<div class="grp-h">Worauf folgt das Kribbeln?</div>'
+    + '<div class="card-sub">Innerhalb '+KRIBBEL_WIN+' h nach dem Ereignis begann eine Kribbelphase.</div>'
+    + dinge.slice(0,10).map(x=>{
+      const q = Math.round(x.st.q*100);
+      return '<div class="frow"><div class="fh"><span class="fn">'+x.ic+' '+esc(x.label)+'</span>'
+        + '<span class="fv" style="color:#2E9E5B">'+q+' %</span></div>'
+        + '<div class="fbar good"><span style="width:'+q+'%"></span></div>'
+        + '<div class="fd">'+x.st.t+' von '+x.st.n+' Mal'+(x.st.lat!==null?' · Ø nach '+offsetTxt(x.st.lat):'')+' · '+x.art+'</div></div>';
+    }).join('');
+}
+
 /* ─── Welche Empfindungen treten auf? ─── */
 function empfindungHTML(){
   const z = {}, zk = {};
@@ -1310,7 +1335,7 @@ function beenderHTML(){
     det.push(x.st.t+' von '+x.st.n+' Mal ('+q+' %)');
     if(x.st.sofort) det.push(x.st.sofort+'× innert 5 Min');
     if(x.st.schnellste !== null) det.push('schnellste Reaktion '+offsetTxt(x.st.schnellste));
-    if(x.st.uebergang) det.push(x.st.uebergang+'× danach Kribbeln statt Ruhe');
+    if(x.st.uebergang) det.push(x.st.uebergang+'× ging es in angenehmes Kribbeln über');
     det.push(x.art);
     return '<div class="frow"><div class="fh"><span class="fn">'+x.ic+' '+esc(x.label)+(sofort?' ⚡':'')+'</span>'
       + '<span class="fv" style="color:#2E9E5B">'+kopf+'</span></div>'
@@ -1481,7 +1506,6 @@ function berichtText(){
   const summeKr = tage.reduce((a,k)=>a+(minKr[k]||0),0);
   const abg = sch.filter(x=>x.e);
   const oD = abg.length ? abg.reduce((a,x)=>a+schDauer(x),0)/abg.length : 0;
-  const mInt = sch.filter(x=>x.int);
   const frei = tage.filter(k=>!minTag[k]).length;
   const nachts = sch.filter(x=>{ const st=new Date(x.s).getHours(); return st>=22 || st<3; }).length;
 
@@ -1491,9 +1515,9 @@ function berichtText(){
   L.push('Zeitraum: '+dtxtKurz(von)+' bis '+dtxtKurz(bis)+' ('+tage.length+' Tage)');
   L.push('');
   L.push('== ÜBERSICHT ==');
-  L.push('Schübe: '+sch.length+' | Ø Dauer: '+dauerTxt(oD)+' | Ø Intensität: '+(mInt.length?zahl(mInt.reduce((a,x)=>a+x.int,0)/mInt.length):'–'));
+  L.push('Schübe: '+sch.length+' | Ø Dauer: '+dauerTxt(oD));
   L.push('Schubzeit gesamt: '+Math.round(summe)+' Min (Ø '+Math.round(summe/tage.length)+' Min/Tag) | schubfreie Tage: '+frei+' von '+tage.length);
-  L.push('Kribbelphasen: '+kr.length+' | Kribbelzeit gesamt: '+Math.round(summeKr)+' Min');
+  L.push('Angenehmes Kribbeln: '+kr.length+' Phasen | '+Math.round(summeKr)+' Min gesamt');
   L.push('Schubbeginn zwischen 22 und 3 Uhr: '+nachts+' von '+sch.length+(sch.length?' ('+Math.round(nachts/sch.length*100)+' %)':''));
   SKALEN.forEach(sk=>{
     const ms = mess.filter(m=>m.art===sk.id);
@@ -1537,7 +1561,7 @@ function berichtText(){
     .sort((a,b)=>a.st.lat-b.st.lat);
   if(!be.length) L.push('– noch nichts erfasst –');
   be.forEach(x=>L.push('· '+x.label+' ['+x.art+']: '+x.st.t+' von '+x.st.n+' ('+Math.round(x.st.q*100)+' %)'
-    + ' | Ø Ende nach '+offsetTxt(x.st.lat) + (x.st.uebergang?' | '+x.st.uebergang+'× danach Kribbeln statt Ruhe':'')));
+    + ' | Ø Ende nach '+offsetTxt(x.st.lat) + (x.st.uebergang?' | '+x.st.uebergang+'× Übergang in angenehmes Kribbeln':'')));
   L.push('');
 
   L.push('== BESTANDTEILE DER MAHLZEITEN (mit vs. ohne) ==');
@@ -1602,7 +1626,6 @@ function berichtText(){
       zeile.forEach(it=>{
         if(it.typ==='p'){
           const x = it.o, det = [];
-          if(x.int) det.push('Int '+x.int);
           if(x.qual && x.qual.length) det.push(x.qual.join('/'));
           if(x.seite) det.push(x.seite);
           if(x.pos) det.push(x.pos);
