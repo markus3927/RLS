@@ -1,0 +1,17 @@
+{
+  "name": "Tagesablauf – RLS-Tracker",
+  "short_name": "Tagesablauf",
+  "description": "Tagesablauf, Mahlzeiten und RLS-Schübe erfassen und Muster erkennen",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F8FB",
+  "theme_color": "#1565C0",
+  "lang": "de-CH",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
