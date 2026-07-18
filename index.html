@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagesablauf">
-<title>Tagesablauf v14 — Bioenergetische Frequenzarbeit</title>
+<title>Tagesablauf v17 — Bioenergetische Frequenzarbeit</title>
 <style>
   :root {
     --royal:    #1565C0;
@@ -124,10 +124,12 @@
   .rauch-top { margin-bottom:0.5rem; }
   .rauch-zahl { font-size:2.1rem; font-weight:800; color:#8a5a2a; line-height:1.1; font-variant-numeric:tabular-nums; }
   .rauch-lbl { font-size:0.78rem; color:#a07a4a; }
-  .rauch-b { flex:1; text-align:center; padding:0.75rem 0.3rem; border-radius:12px; border:1.5px solid #C89A5B;
-             background:#F7E9D4; color:#7a4e1a; font-size:0.92rem; font-weight:800; cursor:pointer; }
-  .rauch-b:active { background:#EFD9B8; }
-  .rauch-b.halb { background:#fff; }
+  .rauch-b { flex:1; text-align:center; padding:0.7rem 0.3rem; border-radius:12px; border:none;
+             font-size:0.95rem; font-weight:800; cursor:pointer; line-height:1.3;
+             transition:background 1s linear; box-shadow:0 2px 8px rgba(0,0,0,0.12); }
+  .rauch-b .rb-t, .rauch-b .rb-s { display:block; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.3); }
+  .rauch-b .rb-s { font-size:0.72rem; font-weight:700; opacity:0.95; }
+  .rauch-b:active { filter:brightness(0.92); }
   .bein-h { font-size:0.84rem; font-weight:800; color:var(--dunkel); text-align:left; margin:0.7rem 0 0.3rem; }
   .bein-h:first-of-type { margin-top:0.2rem; }
   .bein-alt { font-size:0.72rem; font-weight:600; color:#8494a4; }
@@ -266,7 +268,7 @@
   <footer>
     Idee, Konzept &amp; Architektur: Markus Rufer<br>
     Technische Umsetzung mit Claude by Anthropic<br>
-    <span style="opacity:0.7;">Version 14</span>
+    <span style="opacity:0.7;">Version 17</span>
   </footer>
 </main>
 
@@ -558,17 +560,26 @@ function render(keepScroll){
   else if(modus==='bericht') c.innerHTML = viewBericht();
   else if(modus==='verlauf') c.innerHTML = viewVerlauf();
   else c.innerHTML = viewDaten();
-  if(modus==='heute' && laufende().length) startLive();
+  if(modus==='heute') startLive();
   window.scrollTo(0, keepScroll ? y : 0);
 }
 function startLive(){
   const tick = ()=>{
-    const lf = laufende();
-    if(!lf.length){ clearInterval(liveTimer); liveTimer=null; return; }
-    lf.forEach(p=>{
+    if(modus !== 'heute'){ clearInterval(liveTimer); liveTimer=null; return; }
+    laufende().forEach(p=>{
       const el = document.getElementById('uhr_'+p.id);
       if(el) el.textContent = uhrTxt(Date.now()-p.s);
     });
+    const rest = sperreRest(), p = sperreFortschritt();
+    const farbe = mischFarbe(p);
+    ['G','H'].forEach(k=>{
+      const b = document.getElementById('rbBtn'+k);
+      if(b) b.style.background = farbe;
+      const el = document.getElementById('rauchRest'+k);
+      if(el) el.textContent = rest <= 0 ? 'frei' : 'noch '+restTxt(rest);
+    });
+    const sz = document.getElementById('rauchSeit'), lz = letzteZigi();
+    if(sz && lz) sz.textContent = 'letzte um '+fmtT(lz.ts)+' · vor '+dauerTxt(Date.now()-lz.ts);
   };
   tick(); liveTimer = setInterval(tick, 1000);
 }
@@ -593,37 +604,63 @@ function viewHeute(){
 function rauchEintraege(){ return D.eintraege.filter(v=>v.grp==='rauchen'); }
 function rauchHeute(){ return rauchEintraege().filter(v=>dkey(v.ts)===heuteKey()).sort((a,b)=>a.ts-b.ts); }
 function rauchWert(v){ return v.item==='Halbe Zigarette' ? 0.5 : 1; }
+const SPERRE = { 'Zigarette': 60, 'Halbe Zigarette': 30 };   /* Minuten */
+function letzteZigi(){
+  const l = rauchEintraege().slice().sort((a,b)=>b.ts-a.ts);
+  return l.length ? l[0] : null;
+}
+function sperreRest(){
+  const l = letzteZigi();
+  if(!l) return 0;
+  const dauer = (SPERRE[l.item] || 60) * 60000;
+  return Math.max(0, l.ts + dauer - Date.now());
+}
+function restTxt(ms){
+  const m = Math.ceil(ms/60000);
+  return m >= 60 ? Math.floor(m/60)+' h '+p2(m%60) : m+' Min';
+}
 function rauchen(halb){
+  const rest = sperreRest();
   const nm = halb ? 'Halbe Zigarette' : 'Zigarette';
   const ev = {id:uid(), ts:Date.now(), item:nm, grp:'rauchen', liste:[], tags:['Nikotin'], detail:''};
   D.eintraege.push(ev); save();
-  toast('🚬 '+nm+' · '+fmtT(ev.ts)+(schubZu(ev.ts)?' · im Schub':''), ev.id);
+  toast('🚬 '+nm+' · '+fmtT(ev.ts)+(rest>0?' · '+restTxt(rest)+' zu früh':'')+(schubZu(ev.ts)?' · im Schub':''), ev.id);
   render(true);
+}
+function sperreFortschritt(){
+  const l = letzteZigi();
+  if(!l) return 1;
+  const dauer = (SPERRE[l.item] || 60) * 60000;
+  return Math.max(0, Math.min(1, (Date.now() - l.ts) / dauer));
+}
+function mischFarbe(t){   /* 0 = rot, 1 = grün */
+  const a = [192,57,43], b = [46,158,91];
+  return 'rgb('+a.map((v,i)=>Math.round(v + (b[i]-v)*t)).join(',')+')';
+}
+function rauchBtnHTML(halb){
+  const p = sperreFortschritt(), rest = sperreRest(), k = halb?'H':'G';
+  return '<div class="rauch-b" id="rbBtn'+k+'" style="background:'+mischFarbe(p)+';" onclick="rauchen('+halb+')">'
+    + '<span class="rb-t">🚬 '+(halb?'Halbe':'Ganze')+'</span>'
+    + '<span class="rb-s" id="rauchRest'+k+'">'+(rest<=0?'frei':'noch '+restTxt(rest))+'</span>'
+    + '</div>';
 }
 function rauchKarte(){
   const heute = rauchHeute();
   const anzahl = heute.reduce((a,v)=>a+rauchWert(v),0);
   const ganze = heute.filter(v=>v.item==='Zigarette').length;
   const halbe = heute.filter(v=>v.item==='Halbe Zigarette').length;
-  const letzte = heute.length ? heute[heute.length-1] : null;
-  const seit = letzte ? Date.now()-letzte.ts : null;
-  const tage = tagListe(), proTag = {};
-  rauchEintraege().forEach(v=>{ proTag[dkey(v.ts)] = (proTag[dkey(v.ts)]||0)+rauchWert(v); });
-  const letzte7 = tage.slice(-7);
-  const schnitt7 = letzte7.length ? letzte7.reduce((a,k)=>a+(proTag[k]||0),0)/letzte7.length : 0;
   return '<div class="card rauch-card">'
     + '<div class="rauch-top">'
       + '<div class="rauch-zahl">'+(anzahl % 1 ? zahlKomma(anzahl) : anzahl)+'</div>'
       + '<div class="rauch-lbl">heute'+(ganze||halbe ? ' · '+ganze+' ganze, '+halbe+' halbe' : '')+'</div>'
     + '</div>'
-    + '<div class="btn-row">'
-      + '<div class="rauch-b" onclick="rauchen(false)">🚬 Ganze</div>'
-      + '<div class="rauch-b halb" onclick="rauchen(true)">🚬 Halbe</div>'
+    + '<div class="btn-row" id="rauchBtns">'
+      + rauchBtnHTML(false) + rauchBtnHTML(true)
     + '</div>'
-    + '<div class="hint" style="text-align:center;margin-top:0.5rem;">'
-      + (letzte ? 'letzte um '+fmtT(letzte.ts)+' · vor '+dauerTxt(seit) : 'heute noch keine erfasst')
-      + (schnitt7 ? ' · Ø '+zahlKomma(schnitt7)+' pro Tag (7 Tage)' : '')
-    + '</div></div>';
+    + '<div class="hint" style="text-align:center;margin-top:0.5rem;" id="rauchSeit">'
+      + (letzteZigi() ? 'letzte um '+fmtT(letzteZigi().ts)+' · vor '+dauerTxt(Date.now()-letzteZigi().ts) : 'noch keine erfasst')
+    + '</div>'
+    + '<div class="hint" style="text-align:center;">Sperrzeit: ganze 60 Min, halbe 30 Min</div></div>';
 }
 function zahlKomma(x){ return (Math.round(x*10)/10).toString().replace('.',','); }
 function kachel(gid, i){
@@ -1272,6 +1309,24 @@ function rauchAnalyseHTML(sch){
       + '<span class="fv" style="color:'+(schlecht?'#C0392B':'#2E9E5B')+'">'+(diff>0?'+':'')+Math.round(diff)+' Min</span></div>'
       + '<div class="fbar '+(schlecht?'warn':'good')+'"><span style="width:'+Math.round(mv/max*100)+'%"></span></div>'
       + '<div class="fd">mehr: '+Math.round(mv)+' Schubminuten/Tag · weniger: '+Math.round(mw)+' Min/Tag ('+untenT.length+' Tage, Ø '+zahlKomma(zigiUnten)+')</div></div>';
+  }
+
+  /* Sperrzeiten */
+  const r2 = r.slice().sort((a,b)=>a.ts-b.ts);
+  let zuFrueh = 0; const abstaende = [];
+  for(let i=1;i<r2.length;i++){
+    const d = r2[i].ts - r2[i-1].ts;
+    if(d < 12*3600000) abstaende.push(d/60000);
+    if(d < (SPERRE[r2[i-1].item]||60)*60000) zuFrueh++;
+  }
+  if(abstaende.length){
+    const oA = abstaende.reduce((a,b)=>a+b,0)/abstaende.length;
+    const eingehalten = abstaende.length - zuFrueh;
+    const q = Math.round(eingehalten/abstaende.length*100);
+    h += '<div class="grp-h">Sperrzeiten</div>'
+      + '<div class="frow"><div class="fh"><span class="fn">eingehalten</span><span class="fv" style="color:'+(q>=70?'#2E9E5B':'#C0392B')+'">'+q+' %</span></div>'
+      + '<div class="fbar '+(q>=70?'good':'warn')+'"><span style="width:'+q+'%"></span></div>'
+      + '<div class="fd">'+eingehalten+' von '+abstaende.length+' Pausen · Ø Abstand '+offsetTxt(oA*60000)+'</div></div>';
   }
 
   const ab = abstandZuletzterZigi(sch);
