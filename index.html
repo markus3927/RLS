@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagesablauf">
-<title>Tagesablauf v12 — Bioenergetische Frequenzarbeit</title>
+<title>Tagesablauf v14 — Bioenergetische Frequenzarbeit</title>
 <style>
   :root {
     --royal:    #1565C0;
@@ -112,6 +112,11 @@
   .tg.on.nein  { background:#eef2f7; color:#5a6b7c; border-color:#cdd9e6; }
   .tg.on.ja    { background:var(--rot); color:#fff; border-color:var(--rot); }
   .tg.on.gruen { background:var(--gruen); color:#fff; border-color:var(--gruen); }
+  .stufen-row { display:flex; gap:0.28rem; margin:0.1rem 0 0.4rem; }
+  .stg { flex:1; text-align:center; padding:0.6rem 0.1rem; border-radius:10px; border:1.5px solid #cdd9e6;
+         background:#fff; font-size:0.83rem; font-weight:800; color:#8494a4; cursor:pointer; }
+  .stg.on.nein { background:#eef2f7; color:#5a6b7c; border-color:#cdd9e6; }
+  .stufen-log { font-size:0.74rem; color:#8a3b30; text-align:right; margin:-0.2rem 0 0.4rem; }
   .bz-uhr { font-size:0.82rem; font-weight:700; text-align:right; margin:-0.2rem 0 0.3rem; font-variant-numeric:tabular-nums; }
   .bz-uhr.rot { color:var(--rot); }
   .bz-uhr.gruen { color:var(--gruen); }
@@ -126,7 +131,8 @@
   .bein-h { font-size:0.84rem; font-weight:800; color:var(--dunkel); text-align:left; margin:0.7rem 0 0.3rem; }
   .bein-h:first-of-type { margin-top:0.2rem; }
   .bein-alt { font-size:0.72rem; font-weight:600; color:#8494a4; }
-  .int-b.on.blau { background:var(--royal); border-color:var(--royal); color:#fff; }
+  .int-b.on.blau  { background:var(--royal); border-color:var(--royal); color:#fff; }
+  .int-b.on.gruen { background:var(--gruen); border-color:var(--gruen); color:#fff; }
   .qual-h { font-size:0.78rem; font-weight:700; color:#6a7a8c; margin:0.8rem 0 0.35rem; }
   .tl-row.ep.kr { background:#FFF6E5; }
   .tl-row.ep.kr .tl-t { color:#C77700; }
@@ -260,7 +266,7 @@
   <footer>
     Idee, Konzept &amp; Architektur: Markus Rufer<br>
     Technische Umsetzung mit Claude by Anthropic<br>
-    <span style="opacity:0.7;">Version 12</span>
+    <span style="opacity:0.7;">Version 14</span>
   </footer>
 </main>
 
@@ -280,8 +286,32 @@ let D = load() || { schuebe:[], eintraege:[], messungen:[], tage:{}, eigene:{}, 
 D.schuebe = D.schuebe || []; D.eintraege = D.eintraege || []; D.messungen = D.messungen || [];
 D.tage = D.tage || {}; D.eigene = D.eigene || {};
 
+const STUFEN = [
+  { k:1, n:'leicht', f:'#E8A400' },
+  { k:2, n:'mittel', f:'#E2711D' },
+  { k:3, n:'heftig', f:'#C0392B' }
+];
+function stufeInfo(k){ return STUFEN.find(x=>x.k===k) || {k:k, n:'?', f:'#8494a4'}; }
+/* Abschnitte eines Schubs nach Stärke */
+function stufenVerlauf(x){
+  const v = (x.verlauf && x.verlauf.length ? x.verlauf.slice() : [{ts:x.s, stufe:x.stufe||2}])
+    .filter(p=>p.stufe).sort((a,b)=>a.ts-b.ts);
+  if(!v.length) return [];
+  const ende = schEnde(x), segs = [];
+  v.forEach((p,i)=>{
+    const bis = (i+1 < v.length) ? v[i+1].ts : ende;
+    if(bis > p.ts) segs.push({stufe:p.stufe, von:p.ts, bis:bis});
+  });
+  return segs;
+}
+function minutenNachStufe(liste){
+  const m = {1:0, 2:0, 3:0};
+  (liste || schuebeSort()).forEach(x=>stufenVerlauf(x).forEach(sg=>{ m[sg.stufe] = (m[sg.stufe]||0) + (sg.bis-sg.von)/60000; }));
+  return m;
+}
 const SKALEN = [
-  { id:'schwere', n:'Schwere', ic:'🪨', links:'leicht', rechts:'bleischwer' }
+  { id:'schwere',  n:'Schwere',  ic:'🪨',  links:'keine',  rechts:'bleischwer' },
+  { id:'kribbeln', n:'Kribbeln', ic:'🌡️', links:'keins',  rechts:'stark', gut:true }
 ];
 const SKALEN_ALT = [{ id:'unruhe', n:'Unruhe', ic:'〰️', links:'ruhig', rechts:'sehr unruhig' }];
 function skala(id){ return SKALEN.concat(SKALEN_ALT).find(x=>x.id===id) || {id:id, n:id, ic:'📏'}; }
@@ -332,7 +362,7 @@ const GRUPPEN = [
     {n:'Kälte',         ic:'❄️'},
     {n:'Langes Sitzen', ic:'🪑'},
     {n:'Stress',        ic:'⚡'},
-    {n:'Stuhlgang',     ic:'🚽'},
+    {n:'Stuhlgang',     ic:'🚽', menu:4, wahl:['Durchfall','Normal','Verstopft']},
     {n:'Auto fahren',   ic:'🚗'}
   ]},
   { id:'supp', n:'Supplemente & Medikamente', items:[
@@ -383,7 +413,11 @@ const ESSEN = [
     {n:'Mayonnaise',   ic:'🥄', t:['Fett','Ei','Histamin']},
     {n:'Butter',       ic:'🧈', t:['Fett','Milch']},
     {n:'Olivenöl',     ic:'🫒', t:['Fett']},
-    {n:'Sauce',        ic:'🍛', t:['Fett']},
+    {n:'Rahmsauce',    ic:'🥛', t:['Fett','Milch']},
+    {n:'Tomatensauce', ic:'🍅', t:['Gemüse','Nachtschatten','Histamin']},
+    {n:'Käsesauce',    ic:'🧀', t:['Fett','Milch','Histamin']},
+    {n:'Fleischsauce', ic:'🍖', t:['Eiweiss','Fett']},
+    {n:'Bratensauce',  ic:'🍛', t:['Fett']},
     {n:'Suppe',        ic:'🍲', t:[]},
     {n:'Nüsse',        ic:'🥜', t:['Fett','Histamin']},
     {n:'Schokolade',   ic:'🍫', t:['Zucker','Histamin','Koffein']},
@@ -618,6 +652,11 @@ function timelineHTML(key){
       const x = it.o, ai = ART_INFO[art(x)];
       const det = [];
       det.push(x.e ? fmtT(x.s)+'–'+fmtT(x.e) : 'seit '+fmtT(x.s));
+      if(art(x)==='schub'){
+        const sv = stufenVerlauf(x);
+        if(sv.length === 1) det.push(stufeInfo(sv[0].stufe).n);
+        else if(sv.length > 1) det.push(sv.map(sg=>stufeInfo(sg.stufe).n+' '+dauerTxt(sg.bis-sg.von)).join(' → '));
+      }
       if(x.qual && x.qual.length) det.push(x.qual.join(', '));
       if(x.seite) det.push(x.seite);
       if(x.pos) det.push(x.pos);
@@ -651,6 +690,7 @@ function tippen(name, menu, gid){
   if(menu===1) return essenMenue(name, null);
   if(menu===2) return listenMenue(name, suppListe(), 'supp', null);
   if(menu===3) return listenMenue(name, medListe(), 'med', null);
+  if(menu===4) return wahlMenue(name, itemInfo(name).wahl || [], null);
   const inf = itemInfo(name);
   const dd = standardDauer(name);
   const ev = {id:uid(), ts:Date.now(), item:name, grp:gid, tags:(inf.t||[]).slice(), liste:[], detail:''};
@@ -695,6 +735,35 @@ function essenMenue(mahlzeit, evId){
     };
   });
 }
+function wahlMenue(titel, optionen, evId){
+  const ev = evId ? D.eintraege.find(x=>x.id===evId) : null;
+  const gewaehlt = ev && ev.liste && ev.liste.length ? ev.liste[0] : '';
+  const zeit = ev ? ev.ts : Date.now();
+  let h = '<h3>'+esc(titel)+'</h3><div class="sub">'+fmtT(zeit)+' Uhr</div>'
+    + '<div class="chips" id="cW">'+optionen.map(o=>'<div class="chip'+(gewaehlt===o?' on':'')+'" data-v="'+esc(o)+'">'+esc(o)+'</div>').join('')+'</div>'
+    + '<div class="field" style="margin-top:0.7rem;"><label>Zeit</label><input type="datetime-local" id="wT" value="'+toLocalInput(zeit)+'"></div>'
+    + '<div class="ui-btns">'+(ev?'<button class="ui-del" id="bDel">Löschen</button>':'')
+    + '<button class="ui-no" id="bAbb">Abbrechen</button><button class="ui-yes" id="bOk">Speichern</button></div>';
+  modal(h, el=>{
+    el.querySelectorAll('#cW .chip').forEach(c=>c.onclick=()=>{
+      const an = c.classList.contains('on');
+      el.querySelectorAll('#cW .chip').forEach(x=>x.classList.remove('on'));
+      if(!an) c.classList.add('on');
+    });
+    el.querySelector('#bAbb').onclick = closeModal;
+    if(ev) el.querySelector('#bDel').onclick = ()=>frage('Diesen Eintrag löschen?','Löschen',()=>{
+      D.eintraege = D.eintraege.filter(x=>x.id!==ev.id); save(); closeModal(); render(true);
+    });
+    el.querySelector('#bOk').onclick = ()=>{
+      const c = el.querySelector('#cW .chip.on');
+      const t = fromLocalInput(el.querySelector('#wT').value) || Date.now();
+      const l = c ? [c.dataset.v] : [];
+      if(ev){ ev.ts = t; ev.liste = l; }
+      else D.eintraege.push({id:uid(), ts:t, item:titel, grp:'wahl', liste:l, tags:[], detail:''});
+      save(); closeModal(); toast(titel+(l.length?' · '+l[0]:'')+' · '+fmtT(t)); render(true);
+    };
+  });
+}
 function listenMenue(titel, liste, art, evId){
   const ev = evId ? D.eintraege.find(x=>x.id===evId) : null;
   const gewaehlt = ev ? (ev.liste||[]).slice() : [];
@@ -725,6 +794,7 @@ function listenMenue(titel, liste, art, evId){
 function eintragBearbeiten(id){
   const ev = D.eintraege.find(x=>x.id===id); if(!ev) return;
   if(ev.grp==='essen') return essenMenue(ev.item, id);
+  if(ev.grp==='wahl') return wahlMenue(ev.item, itemInfo(ev.item).wahl || [], id);
   if(ev.grp==='supp') return listenMenue(ev.item, ev.item==='Medikament'?medListe():suppListe(), ev.item==='Medikament'?'med':'supp', id);
   modal('<h3>'+esc(ev.item)+'</h3>'
     + '<div class="field"><label>Zeitpunkt</label><input type="datetime-local" id="vT" value="'+toLocalInput(ev.ts)+'"></div>'
@@ -812,33 +882,57 @@ function eigenesListe(art){
 
 /* ═══════════════ BEINE JETZT ═══════════════ */
 function schubKarte(){
-  const sch = laufenderArt('schub'), kr = laufenderArt('kribbel');
-  const m = letzteMessung('schwere');
-  const mHeute = m && dkey(m.ts)===heuteKey();
+  const sch = laufenderArt('schub');
 
   let h = '<div class="card beine-card'+(sch?' aktiv':'')+'">'
     + '<div class="card-h">Wie sind die Beine gerade?</div>';
 
-  /* Schub */
-  h += '<div class="bz"><div class="bz-l">🦵 Schub</div>'
-    + '<div class="bz-r"><div class="tg'+(sch?'':' on nein')+'" onclick="phaseAus(\'schub\')">nein</div>'
-    + '<div class="tg'+(sch?' on ja':'')+'" onclick="phaseAn(\'schub\')">ja</div></div></div>'
-    + (sch ? '<div class="bz-uhr rot">seit '+fmtT(sch.s)+' · <span id="uhr_'+sch.id+'">00:00:00</span></div>' : '');
+  /* Schub mit Stärke – fliegend wechselbar */
+  const stufe = sch ? (sch.stufe||0) : 0;
+  h += '<div class="bz nolines"><div class="bz-l">🦵 Schub</div></div>'
+    + '<div class="stufen-row">'
+    + '<div class="stg'+(sch?'':' on nein')+'" onclick="schubStufe(0)">nein</div>'
+    + STUFEN.map(st=>'<div class="stg'+(stufe===st.k?' on':'')+'" style="'+(stufe===st.k?'background:'+st.f+';border-color:'+st.f+';color:#fff;':'')+'" onclick="schubStufe('+st.k+')">'+st.n+'</div>').join('')
+    + '</div>';
+  if(sch){
+    const sv = stufenVerlauf(sch);
+    h += '<div class="bz-uhr rot">seit '+fmtT(sch.s)+' · <span id="uhr_'+sch.id+'">00:00:00</span></div>';
+    if(sv.length > 1) h += '<div class="stufen-log">'+sv.map(sg=>fmtT(sg.von)+' '+stufeInfo(sg.stufe).n).join(' → ')+'</div>';
+  }
 
-  /* Kribbeln */
-  h += '<div class="bz"><div class="bz-l">🌡️ Kribbeln <small>angenehm</small></div>'
-    + '<div class="bz-r"><div class="tg'+(kr?'':' on nein')+'" onclick="phaseAus(\'kribbel\')">nein</div>'
-    + '<div class="tg'+(kr?' on gruen':'')+'" onclick="phaseAn(\'kribbel\')">ja</div></div></div>'
-    + (kr ? '<div class="bz-uhr gruen">seit '+fmtT(kr.s)+' · <span id="uhr_'+kr.id+'">00:00:00</span></div>' : '');
-
-  /* Schwere */
-  h += '<div class="bz nolines"><div class="bz-l">🪨 Schwere'+(mHeute?' <small>zuletzt '+m.wert+' um '+fmtT(m.ts)+'</small>':'')+'</div></div>'
-    + '<div class="int-row">'
-    + [1,2,3,4,5].map(i=>'<div class="int-b'+(mHeute && m.wert===i?' on blau':'')+'" onclick="messen(\'schwere\','+i+')">'+i+'</div>').join('')
-    + '</div><div class="int-lbl"><span>leicht</span><span>bleischwer</span></div>';
+  /* Skalen 0–5 */
+  SKALEN.forEach(sk=>{
+    const mm = letzteMessung(sk.id);
+    const heute = mm && dkey(mm.ts)===heuteKey();
+    h += '<div class="bz nolines"><div class="bz-l">'+sk.ic+' '+sk.n
+      + (sk.gut?' <small>angenehm</small>':'')
+      + (heute?' <small>zuletzt '+mm.wert+' um '+fmtT(mm.ts)+'</small>':'')+'</div></div>'
+      + '<div class="int-row">'
+      + [0,1,2,3,4,5].map(i=>'<div class="int-b'+(heute && mm.wert===i?(sk.gut?' on gruen':' on blau'):'')+'" onclick="messen(\''+sk.id+'\','+i+')">'+i+'</div>').join('')
+      + '</div><div class="int-lbl"><span>'+sk.links+'</span><span>'+sk.rechts+'</span></div>';
+  });
 
   h += '<button class="link-btn" onclick="schubRueck()">rückwirkend erfassen</button></div>';
   return h;
+}
+function schubStufe(k){
+  const l = laufenderArt('schub'), t = Date.now();
+  if(k === 0){
+    if(!l) return;
+    l.e = t; delete l.neu; save(); schubBearbeiten(l.id, true);
+    return;
+  }
+  if(!l){
+    D.schuebe.push({id:uid(), art:'schub', s:t, e:null, stufe:k, verlauf:[{ts:t, stufe:k}],
+      seite:'', pos:'', hilf:[], qual:[], nz:''});
+    save(); render(true); toast('🦵 Schub · '+stufeInfo(k).n+' · '+fmtT(t));
+    return;
+  }
+  if(l.stufe === k) return;
+  l.stufe = k;
+  l.verlauf = l.verlauf || [{ts:l.s, stufe:k}];
+  l.verlauf.push({ts:t, stufe:k});
+  save(); render(true); toast('Schub jetzt '+stufeInfo(k).n+' · '+fmtT(t));
 }
 function phaseAn(a){
   if(laufenderArt(a)) return;
@@ -854,7 +948,7 @@ function phaseAus(a){
 }
 function messen(id, wert){
   D.messungen.push({id:uid(), ts:Date.now(), art:id, wert:wert});
-  save(); toast('🪨 Schwere '+wert+' · '+fmtT(Date.now()));
+  save(); toast(skala(id).ic+' '+skala(id).n+' '+wert+' · '+fmtT(Date.now()));
   render(true);
 }
 function schubRueck(){
@@ -868,6 +962,8 @@ function schubBearbeiten(id, nachStopp){
     + '<div class="field"><label>Art</label><div class="chips" id="cArt">'
     + [['schub','🦵 RLS-Schub'],['kribbel','🌡️ Kribbeln']].map(o=>'<div class="chip'+(art(e)===o[0]?' on':'')+'" data-v="'+o[0]+'">'+o[1]+'</div>').join('')
     + '</div></div>'
+    + (art(e)==='schub' ? '<div class="field"><label>Stärke</label><div class="chips" id="cStufe">'
+        + STUFEN.map(st=>'<div class="chip'+((e.stufe||0)===st.k?' on':'')+'" data-v="'+st.k+'">'+st.n+'</div>').join('')+'</div></div>' : '')
     + '<div class="field"><label>Start</label><input type="datetime-local" id="eS" value="'+toLocalInput(e.s)+'"></div>'
     + '<div class="field"><label>Ende'+(e.e?'':' (leer = läuft noch)')+'</label><input type="datetime-local" id="eE" value="'+(e.e?toLocalInput(e.e):'')+'"></div>'
     + '<div class="field"><label>Seite</label><div class="chips" id="cSeite">'+SEITEN.map(s=>'<div class="chip'+(e.seite===s?' on':'')+'" data-v="'+s+'">'+s+'</div>').join('')+'</div></div>'
@@ -878,7 +974,7 @@ function schubBearbeiten(id, nachStopp){
     + '<div class="field"><label>Notiz</label><textarea id="eN" rows="2">'+esc(e.nz||'')+'</textarea></div>'
     + '<div class="ui-btns"><button class="ui-del" id="bDel">Löschen</button><button class="ui-no" id="bAbb">Abbrechen</button><button class="ui-yes" id="bOk">Speichern</button></div>';
   modal(h, el=>{
-    ['cArt','cSeite','cPos'].forEach(g=>{
+    ['cArt','cStufe','cSeite','cPos'].forEach(g=>{
       el.querySelectorAll('#'+g+' .chip').forEach(c=>c.onclick=()=>{
         const an = c.classList.contains('on');
         el.querySelectorAll('#'+g+' .chip').forEach(x=>x.classList.remove('on'));
@@ -904,6 +1000,14 @@ function schubBearbeiten(id, nachStopp){
       e.seite = sel('cSeite'); e.pos = sel('cPos');
       e.hilf = Array.from(el.querySelectorAll('#cHilf .chip.on')).map(c=>c.dataset.v);
       e.qual = Array.from(el.querySelectorAll('#cQual .chip.on')).map(c=>c.dataset.v);
+      const stv = sel('cStufe');
+      if(stv){
+        const nk = parseInt(stv,10);
+        if(e.stufe !== nk){
+          e.stufe = nk;
+          if(!e.verlauf || e.verlauf.length <= 1) e.verlauf = [{ts:e.s, stufe:nk}];
+        }
+      }
       e.art = sel('cArt') || 'schub';
       e.nz = el.querySelector('#eN').value.trim();
       delete e.neu;
@@ -987,7 +1091,7 @@ function stoppStat(evsRoh){
     const s = schubZu(v.ts);
     if(s && s.e && s.e >= v.ts && (s.e - v.ts) <= STOPP_WIN*60000){
       treffer++; lat.push(s.e - v.ts);
-      if(D.schuebe.some(k=>art(k)==='kribbel' && Math.abs(k.s - s.e) < 3*60000)) uebergang++;
+      if(D.messungen.some(k=>k.art==='kribbeln' && k.wert>0 && k.ts >= s.e-3*60000 && k.ts - s.e < 30*60000)) uebergang++;
     }
   });
   lat.sort((a,b)=>a-b);
@@ -1008,9 +1112,17 @@ function alleDinge(){
   const supp = {};
   D.eintraege.forEach(v=>{ if(v.grp==='supp') (v.liste||[]).forEach(n=>{ (supp[n]=supp[n]||[]).push(v); }); });
   Object.keys(supp).forEach(n=>out.push({label:n, ic:'💊', art:'Supplement', evs:supp[n]}));
-  const rest = {};
-  D.eintraege.forEach(v=>{ if(v.grp!=='essen' && v.grp!=='supp') (rest[v.item]=rest[v.item]||[]).push(v); });
+  const rest = {}, variante = {};
+  D.eintraege.forEach(v=>{
+    if(v.grp==='essen' || v.grp==='supp') return;
+    (rest[v.item]=rest[v.item]||[]).push(v);
+    if(v.liste && v.liste.length){
+      const k = v.item+': '+v.liste[0];
+      (variante[k]=variante[k]||[]).push(v);
+    }
+  });
   Object.keys(rest).forEach(n=>out.push({label:n, ic:itemInfo(n).ic, art:'Aktivität', evs:rest[n]}));
+  Object.keys(variante).forEach(n=>out.push({label:n, ic:itemInfo(n.split(':')[0]).ic, art:'Aktivität', evs:variante[n]}));
   mahlzeitenNamen().forEach(n=>{
     const evs = mahl.filter(v=>v.item===n);
     if(evs.length) out.push({label:n, ic:itemInfo(n).ic, art:'Mahlzeit', evs:evs});
@@ -1036,10 +1148,13 @@ function viewMuster(){
     + stat(D.messungen.filter(m=>m.art==='schwere').length
         ? (D.messungen.filter(m=>m.art==='schwere').reduce((a,m)=>a+m.wert,0)/D.messungen.filter(m=>m.art==='schwere').length).toFixed(1)
         : '–', 'Ø Schwere')
-    + stat(Math.round(Object.values(minutenProTag(kribbelPhasen())).reduce((a,b)=>a+b,0))+' Min','Kribbeln total')
+    + (D.messungen.filter(m=>m.art==='kribbeln').length
+        ? stat(zahlKomma(D.messungen.filter(m=>m.art==='kribbeln').reduce((a,m)=>a+m.wert,0)/D.messungen.filter(m=>m.art==='kribbeln').length)+' / 5','Ø Kribbeln')
+        : '')
     + (letzteMessung('schwere') ? stat(letzteMessung('schwere').wert+' / 5','Schwere zuletzt') : '')
     + '</div></div>';
 
+  h += staerkeHTML(sch);
   h += rauchAnalyseHTML(sch);
   h += grundzustandHTML();
   h += wirkungHTML();
@@ -1060,6 +1175,56 @@ function viewMuster(){
   return h;
 }
 function stat(v,l){ return '<div class="stat"><div class="sv">'+v+'</div><div class="sl">'+l+'</div></div>'; }
+
+/* ─── Stärke der Schübe ─── */
+function staerkeHTML(sch){
+  const m = minutenNachStufe(sch);
+  const total = m[1]+m[2]+m[3];
+  if(!total) return '';
+  let h = '<div class="card"><div class="card-h">Stärke der Schübe</div>'
+    + '<div class="card-sub">Wie viel Zeit auf welcher Stufe – ein Schub kann mehrere durchlaufen.</div>'
+    + '<div class="fbar" style="height:14px;">'
+    + STUFEN.map(st=>'<span style="width:'+(m[st.k]/total*100)+'%;background:'+st.f+';"></span>').join('')
+    + '</div><div class="fd" style="text-align:left;margin-top:0.3rem;">'
+    + STUFEN.map(st=>st.n+' '+Math.round(m[st.k])+' Min ('+Math.round(m[st.k]/total*100)+' %)').join(' · ')
+    + '</div>';
+  /* Höchste erreichte Stufe pro Schub */
+  const gipfel = {1:0, 2:0, 3:0};
+  sch.forEach(x=>{
+    const sv = stufenVerlauf(x);
+    if(!sv.length) return;
+    gipfel[Math.max.apply(null, sv.map(sg=>sg.stufe))]++;
+  });
+  const n = gipfel[1]+gipfel[2]+gipfel[3];
+  if(n) h += '<div class="grp-h">Höchste Stufe je Schub</div>'
+    + STUFEN.map(st=>'<div class="frow"><div class="fh"><span class="fn">'+st.n+'</span><span class="fv">'+gipfel[st.k]+'×</span></div>'
+      + '<div class="fbar"><span style="width:'+Math.round(gipfel[st.k]/n*100)+'%;background:'+st.f+';"></span></div></div>').join('');
+  /* Steigerungen und Milderungen */
+  let rauf = 0, runter = 0;
+  sch.forEach(x=>{
+    const sv = stufenVerlauf(x);
+    for(let i=1;i<sv.length;i++){ if(sv[i].stufe > sv[i-1].stufe) rauf++; else if(sv[i].stufe < sv[i-1].stufe) runter++; }
+  });
+  if(rauf || runter) h += '<div class="hint" style="margin-top:0.6rem;">'+rauf+'× wurde es während eines Schubs stärker, '+runter+'× milder.</div>';
+  return h + '</div>';
+}
+
+/* ─── Was mildert einen laufenden Schub? ─── */
+function milderStat(evsRoh){
+  const evs = innerhalb(evsRoh);
+  let treffer = 0; const lat = [];
+  evs.forEach(v=>{
+    const s = schubZu(v.ts);
+    if(!s) return;
+    const sv = stufenVerlauf(s);
+    const jetzt = sv.filter(sg=>sg.von <= v.ts).pop();
+    if(!jetzt) return;
+    const spaeter = sv.filter(sg=>sg.von > v.ts && sg.von <= v.ts + 30*60000 && sg.stufe < jetzt.stufe);
+    if(spaeter.length){ treffer++; lat.push(spaeter[0].von - v.ts); }
+  });
+  return { n:evs.length, t:treffer, q:evs.length?treffer/evs.length:0,
+    lat: lat.length ? lat.reduce((a,b)=>a+b,0)/lat.length : null };
+}
 
 /* ─── Rauchen ─── */
 function rauchProTag(){
@@ -1192,32 +1357,37 @@ function wirkungHTML(){
   return h + '<div class="hint" style="margin-top:0.6rem;">Damit das funktioniert: einmal messen, bevor du etwas tust oder isst – und einmal ein bis zwei Stunden danach.</div></div>';
 }
 
-/* ─── Kribbelphasen und Übergänge ─── */
+/* ─── Angenehmes Kribbeln ─── */
 function kribbelHTML(){
-  const kr = kribbelPhasen();
-  if(!kr.length) return '';
-  const abg = kr.filter(x=>x.e);
-  const oD = abg.length ? abg.reduce((a,x)=>a+schDauer(x),0)/abg.length : 0;
-  let nachSchub = 0;
-  kr.forEach(k=>{ if(D.schuebe.some(s=>art(s)==='schub' && s.e && Math.abs(k.s - s.e) < 3*60000)) nachSchub++; });
-  return '<div class="card"><div class="card-h">Angenehmes Kribbeln</div>'
-    + '<div class="card-sub">Der wohltuende Zustand – oft im Anschluss an einen Schub, manchmal für sich allein.</div>'
-    + '<div class="stat-grid">'
-    + stat(kr.length,'Phasen') + stat(dauerTxt(oD),'Ø Dauer')
-    + stat(nachSchub,'nach einem Schub') + stat(kr.length-nachSchub,'ohne Schub davor')
-    + '</div>'
-    + wohltuerHTML()
-    + '</div>';
+  const alleK = D.messungen.filter(m=>m.art==='kribbeln');
+  const mitK = alleK.filter(m=>m.wert > 0);
+  const altPhasen = kribbelPhasen();
+  if(!mitK.length && !altPhasen.length) return '';
+  let h = '<div class="card"><div class="card-h">Angenehmes Kribbeln</div>'
+    + '<div class="card-sub">Der wohltuende Zustand – wann tritt er auf und worauf folgt er?</div>';
+  if(mitK.length){
+    const o = mitK.reduce((a,m)=>a+m.wert,0)/mitK.length;
+    const anteil = alleK.length ? Math.round(mitK.length/alleK.length*100) : 0;
+    const nachSchub = mitK.filter(m=>D.schuebe.some(x=>art(x)==='schub' && x.e && m.ts >= x.e && m.ts - x.e < 60*60000)).length;
+    h += '<div class="stat-grid">'
+      + stat(mitK.length,'Messungen mit Kribbeln') + stat(zahlKomma(o)+' / 5','Ø Stärke')
+      + stat(anteil+' %','aller Messungen') + stat(nachSchub,'innert 1 h nach einem Schub')
+      + '</div>';
+  }
+  if(altPhasen.length) h += '<div class="hint" style="margin-top:0.5rem;">Dazu '+altPhasen.length+' früher als Zeitraum erfasste Kribbelphasen.</div>';
+  return h + wohltuerHTML() + '</div>';
 }
+
 /* ─── Was bringt das angenehme Kribbeln? ─── */
 const KRIBBEL_WIN = 2;   /* Stunden */
+function kribbelMessungen(){ return D.messungen.filter(m=>m.art==='kribbeln' && m.wert > 0); }
 function kribbelStat(evs){
-  const kr = kribbelPhasen(), w = KRIBBEL_WIN*3600000;
+  const kr = kribbelMessungen(), w = KRIBBEL_WIN*3600000;
   let treffer = 0; const lat = [];
   evs.forEach(v=>{
     const ref = endeVon(v);
     let erste = null;
-    kr.forEach(k=>{ if(k.s >= ref && k.s <= ref+w && (erste===null || k.s<erste)) erste = k.s; });
+    kr.forEach(k=>{ if(k.ts >= ref && k.ts <= ref+w && (erste===null || k.ts<erste)) erste = k.ts; });
     if(erste!==null){ treffer++; lat.push(erste - ref); }
   });
   lat.sort((a,b)=>a-b);
@@ -1322,7 +1492,8 @@ function unauffaelligHTML(){
 
 /* ─── Was einen laufenden Schub beendet hat ─── */
 function beenderHTML(){
-  const dinge = alleDinge().map(x=>Object.assign({}, x, {st:stoppStat(x.evs)})).filter(x=>x.st.n >= 2 && x.st.t > 0);
+  const dinge = alleDinge().map(x=>Object.assign({}, x, {st:stoppStat(x.evs), md:milderStat(x.evs)}))
+    .filter(x=>x.st.n >= 2 && (x.st.t > 0 || x.md.t > 0));
   let h = '<div class="card"><div class="card-h">Was hat einen laufenden Schub beendet?</div>'
     + '<div class="card-sub">Nur was <b>während</b> eines Schubs getippt wurde. Sortiert nach Tempo – je schneller die Wirkung, desto eher läuft sie über Nerven und Reize statt über die Verdauung.</div>';
   if(!dinge.length) return h + '<div class="hint">Sobald du während eines Schubs etwas tippst – Glace, Gehen, Dusche – füllt sich das hier.</div></div>';
@@ -1330,12 +1501,13 @@ function beenderHTML(){
   return h + dinge.map(x=>{
     const q = Math.round(x.st.q*100);
     const sofort = x.st.lat !== null && x.st.lat <= 5*60000;
-    const kopf = sofort ? 'sofort' : 'Ende nach '+offsetTxt(x.st.lat);
+    const kopf = x.st.t === 0 ? 'milder' : (sofort ? 'sofort' : 'Ende nach '+offsetTxt(x.st.lat));
     const det = [];
     det.push(x.st.t+' von '+x.st.n+' Mal ('+q+' %)');
     if(x.st.sofort) det.push(x.st.sofort+'× innert 5 Min');
     if(x.st.schnellste !== null) det.push('schnellste Reaktion '+offsetTxt(x.st.schnellste));
     if(x.st.uebergang) det.push(x.st.uebergang+'× ging es in angenehmes Kribbeln über');
+    if(x.md && x.md.t) det.push(x.md.t+'× wurde es milder'+(x.md.lat!==null?' nach '+offsetTxt(x.md.lat):''));
     det.push(x.art);
     return '<div class="frow"><div class="fh"><span class="fn">'+x.ic+' '+esc(x.label)+(sofort?' ⚡':'')+'</span>'
       + '<span class="fv" style="color:#2E9E5B">'+kopf+'</span></div>'
@@ -1516,8 +1688,13 @@ function berichtText(){
   L.push('');
   L.push('== ÜBERSICHT ==');
   L.push('Schübe: '+sch.length+' | Ø Dauer: '+dauerTxt(oD));
+  const stm = minutenNachStufe(sch), stTot = stm[1]+stm[2]+stm[3];
+  if(stTot) L.push('Stärke: '+STUFEN.map(st=>st.n+' '+Math.round(stm[st.k])+' Min ('+Math.round(stm[st.k]/stTot*100)+' %)').join(' | '));
   L.push('Schubzeit gesamt: '+Math.round(summe)+' Min (Ø '+Math.round(summe/tage.length)+' Min/Tag) | schubfreie Tage: '+frei+' von '+tage.length);
-  L.push('Angenehmes Kribbeln: '+kr.length+' Phasen | '+Math.round(summeKr)+' Min gesamt');
+  const kMess = mess.filter(m=>m.art==='kribbeln'), kPos = kMess.filter(m=>m.wert>0);
+  if(kMess.length) L.push('Angenehmes Kribbeln: bei '+kPos.length+' von '+kMess.length+' Messungen spürbar'
+    + (kPos.length?' | Ø Stärke '+zahl(kPos.reduce((a,m)=>a+m.wert,0)/kPos.length)+' von 5':''));
+  if(kr.length) L.push('(zusätzlich '+kr.length+' früher als Zeitraum erfasste Kribbelphasen, '+Math.round(summeKr)+' Min)');
   L.push('Schubbeginn zwischen 22 und 3 Uhr: '+nachts+' von '+sch.length+(sch.length?' ('+Math.round(nachts/sch.length*100)+' %)':''));
   SKALEN.forEach(sk=>{
     const ms = mess.filter(m=>m.art===sk.id);
@@ -1626,6 +1803,11 @@ function berichtText(){
       zeile.forEach(it=>{
         if(it.typ==='p'){
           const x = it.o, det = [];
+          if(art(x)==='schub'){
+            const sv = stufenVerlauf(x);
+            if(sv.length === 1) det.push(sv[0].stufe ? stufeInfo(sv[0].stufe).n : '');
+            else if(sv.length > 1) det.push(sv.map(sg=>stufeInfo(sg.stufe).n+' '+Math.round((sg.bis-sg.von)/60000)+'min').join(' → '));
+          }
           if(x.qual && x.qual.length) det.push(x.qual.join('/'));
           if(x.seite) det.push(x.seite);
           if(x.pos) det.push(x.pos);
