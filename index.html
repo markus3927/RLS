@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagesablauf">
-<title>Tagesablauf v21 — Bioenergetische Frequenzarbeit</title>
+<title>Tagesablauf v22 — Bioenergetische Frequenzarbeit</title>
 <style>
   :root {
     --royal:    #1565C0;
@@ -136,6 +136,8 @@
   .int-b.on.blau  { background:var(--royal); border-color:var(--royal); color:#fff; }
   .int-b.on.gruen { background:var(--gruen); border-color:var(--gruen); color:#fff; }
   .qual-h { font-size:0.78rem; font-weight:700; color:#6a7a8c; margin:0.8rem 0 0.35rem; }
+  .tl-row.stw { background:#FFF7F5; border-radius:8px; border-top-color:transparent; padding:0.4rem 0.5rem; margin:0.15rem 0; }
+  .tl-row.stw .tl-ic { font-size:0.8rem; }
   .tl-row.ep.kr { background:#FFF6E5; }
   .tl-row.ep.kr .tl-t { color:#C77700; }
   .big-btn { width:100%; padding:0.95rem; border:none; border-radius:14px; font-size:1.02rem; font-weight:800; cursor:pointer; }
@@ -268,7 +270,7 @@
   <footer>
     Idee, Konzept &amp; Architektur: Markus Rufer<br>
     Technische Umsetzung mit Claude by Anthropic<br>
-    <span style="opacity:0.7;">Version 21</span>
+    <span style="opacity:0.7;">Version 22</span>
   </footer>
 </main>
 
@@ -707,6 +709,15 @@ function timelineHTML(key){
     /* auch Phasen, die vor diesem Tag begannen und noch hineinreichen */
     if(x.s < tagEnde && schEnde(x) >= tagStart) items.push({ts:Math.max(x.s, tagStart), typ:'sch', o:x});
   });
+  D.schuebe.forEach(x=>{
+    if(art(x) !== 'schub') return;
+    const sv = stufenVerlauf(x);
+    sv.forEach((sg,i)=>{
+      if(i === 0) return;                                   /* erster Abschnitt steckt im Kopfeintrag */
+      if(sg.von < tagStart || sg.von >= tagEnde) return;
+      items.push({ts:sg.von, typ:'stw', o:{sg:sg, vor:sv[i-1], schub:x}});
+    });
+  });
   D.eintraege.forEach(v=>{ if(dkey(v.ts)===key) items.push({ts:v.ts, typ:'ev', o:v}); });
   D.messungen.forEach(m=>{ if(dkey(m.ts)===key) items.push({ts:m.ts, typ:'ms', o:m}); });
   items.sort((a,b)=>a.ts-b.ts);
@@ -723,8 +734,7 @@ function timelineHTML(key){
       det.push(x.e ? fmtT(x.s)+'–'+fmtT(x.e) : 'seit '+fmtT(x.s));
       if(art(x)==='schub'){
         const sv = stufenVerlauf(x);
-        if(sv.length === 1) det.push(stufeInfo(sv[0].stufe).n);
-        else if(sv.length > 1) det.push(sv.map(segTxt).join(' → '));
+        if(sv.length) det.push('Beginn '+segTxt(sv[0]));
       }
       if(x.qual && x.qual.length) det.push(x.qual.join(', '));
       if(x.seite) det.push(x.seite);
@@ -736,6 +746,17 @@ function timelineHTML(key){
       out += '<div class="tl-row ep'+(art(x)==='kribbel'?' kr':'')+'" onclick="schubBearbeiten(\''+x.id+'\')">'
         + '<div class="tl-t">'+(frueher?'↱ '+fmtT(x.s):fmtT(x.s))+'</div><div class="tl-ic">'+ai.ic+'</div>'
         + '<div class="tl-b"><b>'+ai.n+' · '+(x.e?dauerTxt(schDauer(x)):'läuft')+'</b><small>'+esc(det.join(' · '))+'</small></div></div>';
+      return;
+    }
+    if(it.typ==='stw'){
+      const o = it.o, si = stufeInfo(o.sg.stufe), vi = stufeInfo(o.vor.stufe);
+      const rauf = o.sg.stufe > o.vor.stufe;
+      const min = Math.round((o.sg.bis-o.sg.von)/60000);
+      out += '<div class="tl-row stw" onclick="schubBearbeiten(\''+o.schub.id+'\')">'
+        + '<div class="tl-t" style="color:'+si.f+';">'+fmtT(it.ts)+'</div>'
+        + '<div class="tl-ic">'+(rauf?'▲':'▼')+'</div>'
+        + '<div class="tl-b"><b style="color:'+si.f+';">Schub '+si.n+'</b>'
+        + '<small>vorher '+vi.n+' '+dauerTxt(o.sg.von-o.vor.von)+(min>=1?' · dauert '+dauerTxt(o.sg.bis-o.sg.von):'')+'</small></div></div>';
       return;
     }
     if(it.typ==='ms'){
