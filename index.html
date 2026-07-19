@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagesablauf">
-<title>Tagesablauf v17 — Bioenergetische Frequenzarbeit</title>
+<title>Tagesablauf v21 — Bioenergetische Frequenzarbeit</title>
 <style>
   :root {
     --royal:    #1565C0;
@@ -268,7 +268,7 @@
   <footer>
     Idee, Konzept &amp; Architektur: Markus Rufer<br>
     Technische Umsetzung mit Claude by Anthropic<br>
-    <span style="opacity:0.7;">Version 17</span>
+    <span style="opacity:0.7;">Version 21</span>
   </footer>
 </main>
 
@@ -288,12 +288,35 @@ let D = load() || { schuebe:[], eintraege:[], messungen:[], tage:{}, eigene:{}, 
 D.schuebe = D.schuebe || []; D.eintraege = D.eintraege || []; D.messungen = D.messungen || [];
 D.tage = D.tage || {}; D.eigene = D.eigene || {};
 
+/* Einmalige Umstellung: frühere Intensität 1–5 wird zur Stärke leicht/mittel/heftig */
+(function migriere(){
+  if(D.migr18) return;
+  const um = i => i <= 2 ? 1 : (i === 3 ? 2 : 3);
+  D.schuebe.forEach(x=>{
+    if((x.art||'schub') !== 'schub') return;
+    if(Array.isArray(x.verlauf) && x.verlauf.length){
+      x.verlauf = x.verlauf.map(p=>p.stufe ? p : (p.int ? {ts:p.ts, stufe:um(p.int)} : null)).filter(Boolean);
+    }
+    if(!x.stufe){
+      if(x.int) x.stufe = um(x.int);
+      else if(x.verlauf && x.verlauf.length) x.stufe = x.verlauf[x.verlauf.length-1].stufe;
+    }
+    if(x.stufe && (!x.verlauf || !x.verlauf.length)) x.verlauf = [{ts:x.s, stufe:x.stufe}];
+  });
+  D.migr18 = true;
+  save();
+})();
+
 const STUFEN = [
   { k:1, n:'leicht', f:'#E8A400' },
   { k:2, n:'mittel', f:'#E2711D' },
   { k:3, n:'heftig', f:'#C0392B' }
 ];
 function stufeInfo(k){ return STUFEN.find(x=>x.k===k) || {k:k, n:'?', f:'#8494a4'}; }
+function segTxt(sg){
+  const min = Math.round((sg.bis-sg.von)/60000);
+  return stufeInfo(sg.stufe).n + (min >= 1 ? ' '+dauerTxt(sg.bis-sg.von) : '');
+}
 /* Abschnitte eines Schubs nach Stärke */
 function stufenVerlauf(x){
   const v = (x.verlauf && x.verlauf.length ? x.verlauf.slice() : [{ts:x.s, stufe:x.stufe||2}])
@@ -301,8 +324,12 @@ function stufenVerlauf(x){
   if(!v.length) return [];
   const ende = schEnde(x), segs = [];
   v.forEach((p,i)=>{
-    const bis = (i+1 < v.length) ? v[i+1].ts : ende;
-    if(bis > p.ts) segs.push({stufe:p.stufe, von:p.ts, bis:bis});
+    const letzter = (i === v.length-1);
+    const bis = letzter ? Math.max(ende, p.ts) : v[i+1].ts;
+    if(bis <= p.ts && !letzter) return;        /* Zwischenpunkt ohne Dauer: übersprungen */
+    const vorher = segs[segs.length-1];
+    if(vorher && vorher.stufe === p.stufe) vorher.bis = bis;   /* gleiche Stufe zusammenfassen */
+    else segs.push({stufe:p.stufe, von:p.ts, bis:bis});
   });
   return segs;
 }
@@ -483,6 +510,7 @@ function toLocalInput(ts){
   return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+'T'+p2(d.getHours())+':'+p2(d.getMinutes());
 }
 function fromLocalInput(v){ const t=new Date(v).getTime(); return isNaN(t)?null:t; }
+function dtxtKurz(ts){ const d=new Date(ts); return TAGE_K[d.getDay()]+' '+p2(d.getDate())+'.'+p2(d.getMonth()+1)+'.'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -674,7 +702,11 @@ function kachel(gid, i){
 }
 function timelineHTML(key){
   const items = [];
-  D.schuebe.forEach(x=>{ if(dkey(x.s)===key) items.push({ts:x.s, typ:'sch', o:x}); });
+  const tagStart = new Date(key+'T00:00').getTime(), tagEnde = tagStart + 86400000;
+  D.schuebe.forEach(x=>{
+    /* auch Phasen, die vor diesem Tag begannen und noch hineinreichen */
+    if(x.s < tagEnde && schEnde(x) >= tagStart) items.push({ts:Math.max(x.s, tagStart), typ:'sch', o:x});
+  });
   D.eintraege.forEach(v=>{ if(dkey(v.ts)===key) items.push({ts:v.ts, typ:'ev', o:v}); });
   D.messungen.forEach(m=>{ if(dkey(m.ts)===key) items.push({ts:m.ts, typ:'ms', o:m}); });
   items.sort((a,b)=>a.ts-b.ts);
@@ -692,15 +724,17 @@ function timelineHTML(key){
       if(art(x)==='schub'){
         const sv = stufenVerlauf(x);
         if(sv.length === 1) det.push(stufeInfo(sv[0].stufe).n);
-        else if(sv.length > 1) det.push(sv.map(sg=>stufeInfo(sg.stufe).n+' '+dauerTxt(sg.bis-sg.von)).join(' → '));
+        else if(sv.length > 1) det.push(sv.map(segTxt).join(' → '));
       }
       if(x.qual && x.qual.length) det.push(x.qual.join(', '));
       if(x.seite) det.push(x.seite);
       if(x.pos) det.push(x.pos);
       if(x.hilf && x.hilf.length) det.push('half: '+x.hilf.join(', '));
       if(x.nz) det.push(x.nz);
+      const frueher = dkey(x.s) !== key;
+      if(frueher) det.unshift('begann am '+dtxtKurz(x.s));
       out += '<div class="tl-row ep'+(art(x)==='kribbel'?' kr':'')+'" onclick="schubBearbeiten(\''+x.id+'\')">'
-        + '<div class="tl-t">'+fmtT(x.s)+'</div><div class="tl-ic">'+ai.ic+'</div>'
+        + '<div class="tl-t">'+(frueher?'↱ '+fmtT(x.s):fmtT(x.s))+'</div><div class="tl-ic">'+ai.ic+'</div>'
         + '<div class="tl-b"><b>'+ai.n+' · '+(x.e?dauerTxt(schDauer(x)):'läuft')+'</b><small>'+esc(det.join(' · '))+'</small></div></div>';
       return;
     }
@@ -933,7 +967,8 @@ function schubKarte(){
     + '</div>';
   if(sch){
     const sv = stufenVerlauf(sch);
-    h += '<div class="bz-uhr rot">seit '+fmtT(sch.s)+' · <span id="uhr_'+sch.id+'">00:00:00</span></div>';
+    h += '<div class="bz-uhr rot">seit '+(dkey(sch.s)!==heuteKey() ? dtxtKurz(sch.s)+' ' : '')+fmtT(sch.s)
+      + ' · <span id="uhr_'+sch.id+'">00:00:00</span></div>';
     if(sv.length > 1) h += '<div class="stufen-log">'+sv.map(sg=>fmtT(sg.von)+' '+stufeInfo(sg.stufe).n).join(' → ')+'</div>';
   }
 
@@ -960,16 +995,46 @@ function schubStufe(k){
     return;
   }
   if(!l){
-    D.schuebe.push({id:uid(), art:'schub', s:t, e:null, stufe:k, verlauf:[{ts:t, stufe:k}],
-      seite:'', pos:'', hilf:[], qual:[], nz:''});
-    save(); render(true); toast('🦵 Schub · '+stufeInfo(k).n+' · '+fmtT(t));
+    /* Kam der letzte Schub gerade eben erst zum Ende? Dann fragen statt zerstückeln. */
+    const letzter = schuebeSort().filter(x=>x.e).pop();
+    if(letzter && t - letzter.e < 45*60000){
+      const pause = t - letzter.e;
+      modal('<div class="ui-msg">Der letzte Schub endete vor '+dauerTxt(pause)+'.\n\nGehört das jetzt noch dazu oder ist es ein neuer Schub?</div>'
+        + '<div class="ui-btns"><button class="ui-no" id="bNeu">Neuer Schub</button><button class="ui-yes" id="bWeiter">Fortsetzen</button></div>',
+        el=>{
+          el.querySelector('#bNeu').onclick = ()=>{ closeModal(); schubNeu(k); };
+          el.querySelector('#bWeiter').onclick = ()=>{
+            closeModal();
+            letzter.e = null;
+            letzter.stufe = k;
+            letzter.verlauf = (letzter.verlauf||[]).filter(p=>p.stufe);
+            letzter.verlauf.push({ts:Date.now(), stufe:k});
+            save(); render(true);
+            toast('Schub läuft weiter · '+stufeInfo(k).n);
+          };
+        });
+      return;
+    }
+    schubNeu(k);
     return;
   }
   if(l.stufe === k) return;
   l.stufe = k;
-  l.verlauf = l.verlauf || [{ts:l.s, stufe:k}];
-  l.verlauf.push({ts:t, stufe:k});
+  l.verlauf = (l.verlauf || []).filter(p=>p.stufe);
+  if(!l.verlauf.length){
+    l.verlauf = [{ts:l.s, stufe:k}];          /* Altbestand ohne Verlauf: ganzer Schub bekommt die Stufe */
+  } else {
+    const letzt = l.verlauf[l.verlauf.length-1];
+    if(t - letzt.ts < 60000) letzt.stufe = k;  /* Vertipper: Punkt ersetzen statt anhängen */
+    else l.verlauf.push({ts:t, stufe:k});
+  }
   save(); render(true); toast('Schub jetzt '+stufeInfo(k).n+' · '+fmtT(t));
+}
+function schubNeu(k){
+  const t = Date.now();
+  D.schuebe.push({id:uid(), art:'schub', s:t, e:null, stufe:k, verlauf:[{ts:t, stufe:k}],
+    seite:'', pos:'', hilf:[], qual:[], nz:''});
+  save(); render(true); toast('🦵 Schub · '+stufeInfo(k).n+' · '+fmtT(t));
 }
 function phaseAn(a){
   if(laufenderArt(a)) return;
@@ -999,8 +1064,12 @@ function schubBearbeiten(id, nachStopp){
     + '<div class="field"><label>Art</label><div class="chips" id="cArt">'
     + [['schub','🦵 RLS-Schub'],['kribbel','🌡️ Kribbeln']].map(o=>'<div class="chip'+(art(e)===o[0]?' on':'')+'" data-v="'+o[0]+'">'+o[1]+'</div>').join('')
     + '</div></div>'
-    + (art(e)==='schub' ? '<div class="field"><label>Stärke</label><div class="chips" id="cStufe">'
-        + STUFEN.map(st=>'<div class="chip'+((e.stufe||0)===st.k?' on':'')+'" data-v="'+st.k+'">'+st.n+'</div>').join('')+'</div></div>' : '')
+    + (art(e)==='schub' ? '<div class="field"><label>Stärke'+((e.verlauf||[]).filter(p=>p.stufe).length>1?' (ändert den letzten Abschnitt)':'')+'</label><div class="chips" id="cStufe">'
+        + STUFEN.map(st=>'<div class="chip'+((e.stufe||0)===st.k?' on':'')+'" data-v="'+st.k+'">'+st.n+'</div>').join('')+'</div>'
+        + ((e.verlauf||[]).filter(p=>p.stufe).length>1
+            ? '<div class="hint" style="margin-top:0.35rem;">Verlauf: '+stufenVerlauf(e).map(sg=>fmtT(sg.von)+' '+stufeInfo(sg.stufe).n).join(' → ')
+              + ' · <a href="#" id="vlWeg" style="color:#C0392B;">Verlauf löschen</a></div>' : '')
+        + '</div>' : '')
     + '<div class="field"><label>Start</label><input type="datetime-local" id="eS" value="'+toLocalInput(e.s)+'"></div>'
     + '<div class="field"><label>Ende'+(e.e?'':' (leer = läuft noch)')+'</label><input type="datetime-local" id="eE" value="'+(e.e?toLocalInput(e.e):'')+'"></div>'
     + '<div class="field"><label>Seite</label><div class="chips" id="cSeite">'+SEITEN.map(s=>'<div class="chip'+(e.seite===s?' on':'')+'" data-v="'+s+'">'+s+'</div>').join('')+'</div></div>'
@@ -1019,6 +1088,8 @@ function schubBearbeiten(id, nachStopp){
       });
     });
     el.querySelectorAll('#cHilf .chip, #cQual .chip').forEach(c=>c.onclick=()=>c.classList.toggle('on'));
+    const vw = el.querySelector('#vlWeg');
+    if(vw) vw.onclick = ev2=>{ ev2.preventDefault(); e.verlauf = [{ts:e.s, stufe:e.stufe||2}]; save(); closeModal(); schubBearbeiten(e.id); };
     el.querySelector('#bAbb').onclick = ()=>{
       if(e.neu){ D.schuebe = D.schuebe.filter(x=>x.id!==e.id); save(); }
       closeModal(); render(true);
@@ -1040,10 +1111,10 @@ function schubBearbeiten(id, nachStopp){
       const stv = sel('cStufe');
       if(stv){
         const nk = parseInt(stv,10);
-        if(e.stufe !== nk){
-          e.stufe = nk;
-          if(!e.verlauf || e.verlauf.length <= 1) e.verlauf = [{ts:e.s, stufe:nk}];
-        }
+        e.stufe = nk;
+        const vl = (e.verlauf||[]).filter(p=>p.stufe).sort((a,b)=>a.ts-b.ts);
+        if(vl.length <= 1) e.verlauf = [{ts:e.s, stufe:nk}];
+        else { vl[vl.length-1].stufe = nk; e.verlauf = vl; }   /* letzter Abschnitt = aktueller Zustand */
       }
       e.art = sel('cArt') || 'schub';
       e.nz = el.querySelector('#eN').value.trim();
@@ -1714,7 +1785,6 @@ function setBerTage(n){ BER_TAGE = n; render(true); }
 function setBerVoll(v){ BER_VOLL = v; render(true); }
 
 function zahl(x, k){ return (Math.round(x*Math.pow(10,k||1))/Math.pow(10,k||1)).toString().replace('.',','); }
-function dtxtKurz(ts){ const d=new Date(ts); return TAGE_K[d.getDay()]+' '+p2(d.getDate())+'.'+p2(d.getMonth()+1)+'.'; }
 
 function berichtText(){
   const alle = tagListe();
@@ -2037,7 +2107,22 @@ function alleLoeschen(){
 }
 
 /* ═══════════════ START ═══════════════ */
+function altePhasePruefen(){
+  const l = laufende().filter(p=>Date.now() - p.s > 6*3600000);
+  if(!l.length) return;
+  const p = l[0], ai = ART_INFO[art(p)];
+  modal('<h3>Läuft das noch?</h3>'
+    + '<div class="ui-msg">'+ai.ic+' '+ai.n+' läuft seit '+dtxtKurz(p.s)+' '+fmtT(p.s)
+    + ' – das sind '+dauerTxt(Date.now()-p.s)+'.\n\nVermutlich wurde das Beenden vergessen.</div>'
+    + '<div class="ui-btns"><button class="ui-no" id="bWeiter">läuft wirklich noch</button>'
+    + '<button class="ui-yes" id="bEnde">jetzt beenden</button></div>',
+    el=>{
+      el.querySelector('#bWeiter').onclick = ()=>{ closeModal(); };
+      el.querySelector('#bEnde').onclick = ()=>{ closeModal(); schubBearbeiten(p.id, true); };
+    });
+}
 render();
+altePhasePruefen();
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
